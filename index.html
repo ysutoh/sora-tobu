@@ -323,7 +323,7 @@
     // しきい値を上げ・クールダウンを延ばして連続誤検知を抑制
     const now = performance.now();
     if (intensity > 0.42 && now - lastBig > 250) {
-      lift = Math.min(1.2, lift + 0.60);
+      lift = Math.min(1.2, lift + 0.28);
       lastBig = now;
       flapWings();
     }
@@ -350,8 +350,8 @@
     flapFill.style.width = Math.round(Math.min(1, m * 2.2) * 100) + "%";
 
     // 物理：lift があると上昇、なければゆっくり下降
-    lift *= 0.96;
-    velY += (-lift * 0.022) + 0.0020;   // 重力 + 揚力
+    lift *= 0.95;
+    velY += (-lift * 0.018) + 0.0020;   // 重力 + 揚力
     velY *= 0.97;
     heroY += velY;
 
