@@ -350,9 +350,9 @@
     flapFill.style.width = Math.round(Math.min(1, m * 2.2) * 100) + "%";
 
     // 物理：lift があると上昇、なければゆっくり下降
-    lift *= 0.94;
-    velY += (-lift * 0.018) + 0.0042;   // 重力 + 揚力
-    velY *= 0.96;
+    lift *= 0.96;
+    velY += (-lift * 0.018) + 0.0020;   // 重力 + 揚力
+    velY *= 0.97;
     heroY += velY;
 
     // 画面内に収める
