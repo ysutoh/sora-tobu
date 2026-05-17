@@ -73,12 +73,13 @@
     padding:32px;z-index:50;
   }
   .screen h1{
-    font-size:64px;font-weight:900;color:#fff;letter-spacing:2px;
-    text-shadow:0 6px 0 rgba(90,150,200,.45);margin-bottom:6px;line-height:1.1;
+    font-size:64px;font-weight:900;color:#1a5ca8;letter-spacing:2px;
+    text-shadow:0 3px 0 rgba(255,255,255,.8),0 6px 12px rgba(100,160,220,.35);
+    margin-bottom:6px;line-height:1.1;
   }
   .screen p{
-    font-size:26px;font-weight:700;color:#fff;line-height:1.7;
-    text-shadow:0 2px 4px rgba(80,140,190,.4);max-width:520px;margin:14px 0 30px;
+    font-size:26px;font-weight:700;color:#1a4a80;line-height:1.7;
+    text-shadow:0 1px 4px rgba(255,255,255,.7);max-width:520px;margin:14px 0 30px;
   }
   .bigbtn{
     border:0;cursor:pointer;font-family:inherit;
@@ -89,18 +90,18 @@
     transition:transform .08s,box-shadow .08s;
   }
   .bigbtn:active{transform:translateY(6px);box-shadow:0 3px 0 #e3851c,0 6px 10px rgba(180,110,20,.35);}
-  .note{font-size:20px;color:#fff;opacity:.9;margin-top:26px;line-height:1.6;font-weight:600;}
+  .note{font-size:20px;color:#1a5080;opacity:.9;margin-top:26px;line-height:1.6;font-weight:600;text-shadow:0 1px 3px rgba(255,255,255,.6);}
   .hidden{display:none!important;}
 
   /* スコアの大きな表示 */
-  #result-num{font-size:120px;font-weight:900;color:#fff;
-    text-shadow:0 8px 0 rgba(90,150,200,.45);margin:4px 0 4px;}
+  #result-num{font-size:120px;font-weight:900;color:#1a5ca8;
+    text-shadow:0 4px 0 rgba(255,255,255,.8),0 8px 16px rgba(100,160,220,.35);margin:4px 0 4px;}
 
   /* 開始カウントダウン */
   #count{
     position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    font-size:200px;font-weight:900;color:#fff;z-index:40;
-    text-shadow:0 10px 0 rgba(90,150,200,.45);pointer-events:none;
+    font-size:200px;font-weight:900;color:#1a5ca8;z-index:40;
+    text-shadow:0 6px 0 rgba(255,255,255,.8),0 12px 20px rgba(100,160,220,.4);pointer-events:none;
   }
 
   /* きらきら（取得エフェクト） */
@@ -215,9 +216,10 @@
 
   // ヒーローの位置（画面比率 0〜1）
   let heroX = 0.5, heroY = 0.62;
-  let velY = 0;          // 上下の速さ
-  let lift = 0;          // はばたきによる上昇エネルギー
-  let tilt = 0;          // 左右の傾き（演出用）
+  let velY = 0, velX = 0;  // 速さ
+  let lift = 0;             // はばたきによる上昇エネルギー
+  let tilt = 0;             // 左右の傾き（演出用）
+  let horzBias = 0;         // カメラ左右差（-1=左, +1=右）
 
   // ===== 雲を配置 =====
   function makeClouds() {
@@ -291,30 +293,37 @@
 
   // ===== はばたき検出（左右ゾーンの動き量） =====
   let motionAvg = 0;
-  let flapPhase = 0;       // 動き→静止→動き の波を数える
   let lastBig = 0;
+  const HALF_W = work.width / 2; // カメラ左右の境界
   function detectMotion() {
     wctx.drawImage(cam, 0, 0, work.width, work.height);
     const cur = wctx.getImageData(0, 0, work.width, work.height);
-    let diff = 0;
+    let diffL = 0, diffR = 0;
     if (prevFrame) {
       const d = cur.data, p = prevFrame.data;
-      // 間引いてサンプリング（軽量化）
       for (let i = 0; i < d.length; i += 16) {
         const dd = Math.abs(d[i] - p[i]) + Math.abs(d[i+1] - p[i+1]) + Math.abs(d[i+2] - p[i+2]);
-        if (dd > 60) diff++;
+        // 閾値を上げて微細な明るさ変化を無視（感度ダウン）
+        if (dd > 90) {
+          if ((i >> 2) % work.width < HALF_W) diffL++;
+          else diffR++;
+        }
       }
     }
     prevFrame = cur;
 
-    // 動きの強さ（0〜1くらい）
-    const intensity = Math.min(1, diff / 900);
+    const diff = diffL + diffR;
+    // 正規化分母を大きくして intensity が上がりにくくする
+    const intensity = Math.min(1, diff / 1400);
     motionAvg = motionAvg * 0.7 + intensity * 0.3;
 
-    // はばたき：強い動きが来たら lift を足す（連打しても優しく上がる）
+    // カメラ左 = 子どもの右腕 → 右移動（フロントカメラは鏡像のため）
+    horzBias = diff > 20 ? (diffL - diffR) / Math.max(1, diff) : 0;
+
+    // しきい値を上げ・クールダウンを延ばして連続誤検知を抑制
     const now = performance.now();
-    if (intensity > 0.28 && now - lastBig > 160) {
-      lift = Math.min(1.2, lift + 0.55);
+    if (intensity > 0.42 && now - lastBig > 250) {
+      lift = Math.min(1.2, lift + 0.45);
       lastBig = now;
       flapWings();
     }
@@ -350,9 +359,13 @@
     if (heroY < 0.12) { heroY = 0.12; velY = 0; }
     if (heroY > 0.86) { heroY = 0.86; velY *= -0.3; }
 
-    // 上下の動きにあわせて少し左右にゆれる（飛んでる感）
-    tilt = Math.sin(performance.now() / 380) * 6 + velY * 120;
-    heroX = 0.5 + Math.sin(performance.now() / 1700) * 0.06;
+    // 横移動：カメラ左右の動き差で操作
+    velX += horzBias * 0.005;
+    velX *= 0.90;
+    heroX += velX;
+    heroX = Math.max(0.08, Math.min(0.92, heroX));
+
+    tilt = velX * 400 + velY * 80;
 
     const hero = $("hero");
     const W = innerWidth, H = innerHeight;
@@ -420,7 +433,7 @@
 
     // 初期化
     score = 0; timeLeft = 40;
-    heroY = 0.62; velY = 0; lift = 0;
+    heroX = 0.5; heroY = 0.62; velX = 0; velY = 0; lift = 0; horzBias = 0;
     scoreEl.textContent = "0";
     timeEl.textContent = timeLeft;
     clearStars();
